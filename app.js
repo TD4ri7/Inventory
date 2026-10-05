@@ -57,6 +57,7 @@ function render() {
     <span><b>${items.length}</b>всего</span>
     <span><b>${items.filter((i) => i.status === "Свободен").length}</b>свободно</span>
     <span><b>${items.filter((i) => i.status === "Занят").length}</b>занято</span>
+    <span class="warn"><b>${items.filter((i) => i.status === "Сломан").length}</b>сломано</span>
     <span class="warn"><b>${items.filter((i) => i.hasDefect).length}</b>с дефектами</span>`;
 
   const list = filtered();
@@ -64,20 +65,24 @@ function render() {
   $("list").innerHTML = list.map(cardHtml).join("");
 }
 
+const normPurpose = (p) => (p === "Учебный" || !p ? "Рабочий" : p);
+
 function cardHtml(i) {
   const busy = i.status === "Занят";
+  const broken = i.status === "Сломан";
+  const badgeClass = broken ? "broken" : busy ? "busy" : "free";
   const kit = (i.kit || []).map((k, idx) =>
     `<button class="chip ${k.ok ? "" : "missing"}" data-act="kit" data-id="${i.id}" data-idx="${idx}" title="Нажмите, чтобы отметить наличие">${esc(k.name)}</button>`
   ).join("");
   return `
-  <article class="card ${i.hasDefect ? "has-defect" : ""}">
+  <article class="card ${i.hasDefect || broken ? "has-defect" : ""}">
     <div class="card-head">
       <span class="inv">${esc(i.inv)}</span>
-      <span class="badge ${busy ? "busy" : "free"}">${esc(i.status)}</span>
+      <span class="badge ${badgeClass}">${esc(i.status)}</span>
     </div>
     <div>
       <p class="title">${esc(i.type)} ${esc(i.brand)}</p>
-      <p class="sub">${esc(i.purpose)}${busy && i.owner ? " · владелец: " + esc(i.owner) : ""}</p>
+      <p class="sub">${esc(normPurpose(i.purpose))}${busy && i.owner ? " · владелец: " + esc(i.owner) : ""}</p>
     </div>
     ${i.hasDefect ? `<div class="defect">Дефект: ${esc(i.defect || "не описан")}</div>` : ""}
     ${kit ? `<div><p class="kit-title">Комплект (нажмите, если чего-то нет)</p><div class="chips">${kit}</div></div>` : ""}
@@ -120,7 +125,7 @@ function openDialog(item) {
   $("dlgTitle").textContent = item ? "Изменить технику" : "Новая техника";
   $("type").value = item?.type ?? TYPES[0];
   $("inv").value = item?.inv ?? "";
-  $("purpose").value = item?.purpose ?? "Учебный";
+  $("purpose").value = normPurpose(item?.purpose);
   $("brand").value = item?.brand ?? "";
   $("status").value = item?.status ?? "Свободен";
   $("owner").value = item?.owner ?? "";

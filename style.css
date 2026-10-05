@@ -11,12 +11,16 @@
   --busy-bg: #fbecc8;
   --bad: #b3261e;
   --bad-bg: #fbe0dd;
+  --head-bg: #1d2740;
+  --head-ink: #ffffff;
+  --head-muted: #b9c2dc;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #131a2b; --card: #1c2540; --ink: #e8ecf6; --muted: #98a2bd; --line: #2e3a5c;
     --ok: #6fd3a0; --ok-bg: #173a2b; --busy: #f0c869; --busy-bg: #3d3216;
     --bad: #ff9a92; --bad-bg: #4a1f1c;
+    --head-bg: #0b1120; --head-ink: #ffffff; --head-muted: #a9b3d0;
   }
 }
 * { box-sizing: border-box; }
@@ -24,11 +28,11 @@ body {
   margin: 0; background: var(--bg); color: var(--ink);
   font-family: "Golos Text", system-ui, sans-serif; font-size: 16px; line-height: 1.45;
 }
-.top { background: var(--ink); color: #fff; padding: 20px 20px 0; }
+.top { background: var(--head-bg); color: var(--head-ink); padding: 20px 20px 0; border-bottom: 4px solid var(--tag); }
 .top-inner { max-width: 1100px; margin: 0 auto; display: flex; gap: 16px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
 h1 { margin: 0; font-size: 1.6rem; font-weight: 800; letter-spacing: -0.01em; }
-.stats { max-width: 1100px; margin: 18px auto 0; display: flex; gap: 28px; flex-wrap: wrap; padding-bottom: 16px; color: #c9d0e4; }
-.stats b { color: #fff; font-size: 1.3rem; margin-right: 6px; font-weight: 800; }
+.stats { max-width: 1100px; margin: 18px auto 0; display: flex; gap: 28px; flex-wrap: wrap; padding-bottom: 16px; color: var(--head-muted); }
+.stats b { color: var(--head-ink); font-size: 1.3rem; margin-right: 6px; font-weight: 800; }
 .stats .warn b { color: var(--tag); }
 
 main { max-width: 1100px; margin: 0 auto; padding: 20px; }
@@ -67,6 +71,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-vi
 .badge { font-size: 0.8rem; font-weight: 600; padding: 3px 10px; border-radius: 99px; }
 .badge.free { background: var(--ok-bg); color: var(--ok); }
 .badge.busy { background: var(--busy-bg); color: var(--busy); }
+.badge.broken { background: var(--bad-bg); color: var(--bad); }
 .title { margin: 0; font-weight: 600; }
 .sub { margin: 2px 0 0; color: var(--muted); font-size: 0.9rem; }
 .defect { background: var(--bad-bg); color: var(--bad); border-radius: 8px; padding: 8px 10px; font-size: 0.9rem; }
