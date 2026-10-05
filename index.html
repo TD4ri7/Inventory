@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Инвентаризация школы</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <h1>Инвентаризация школы</h1>
+      <button id="addBtn" class="btn primary">Добавить технику</button>
+    </div>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <main>
+    <div id="banner" class="banner" hidden></div>
+
+    <section class="filters">
+      <input id="search" type="search" placeholder="Поиск: номер, бренд, владелец">
+      <select id="fStatus">
+        <option value="">Любой статус</option>
+        <option value="Свободен">Свободен</option>
+        <option value="Занят">Занят</option>
+      </select>
+      <select id="fType">
+        <option value="">Любой тип</option>
+      </select>
+      <label class="check"><input type="checkbox" id="fDefect"> Только с дефектами</label>
+    </section>
+
+    <section id="list" class="list"></section>
+    <p id="empty" class="empty" hidden>Пока ничего нет. Нажмите «Добавить технику», чтобы внести первое устройство.</p>
+  </main>
+
+  <dialog id="dlg">
+    <form id="form" method="dialog">
+      <h2 id="dlgTitle">Новая техника</h2>
+
+      <div class="grid">
+        <label>Тип
+          <select id="type" required></select>
+        </label>
+        <label>Инвентарный номер
+          <input id="inv" required placeholder="MK-306">
+        </label>
+        <label>Назначение
+          <select id="purpose">
+            <option>Учебный</option>
+            <option>Ученический</option>
+          </select>
+        </label>
+        <label>Бренд
+          <input id="brand" placeholder="DELL">
+        </label>
+        <label>Статус
+          <select id="status">
+            <option>Свободен</option>
+            <option>Занят</option>
+          </select>
+        </label>
+        <label>Владелец
+          <input id="owner" placeholder="Имя владельца">
+        </label>
+      </div>
+
+      <fieldset>
+        <legend>Дефект</legend>
+        <label class="check"><input type="checkbox" id="hasDefect"> Есть дефект</label>
+        <textarea id="defect" rows="2" placeholder="Что сломано или повреждено"></textarea>
+      </fieldset>
+
+      <fieldset>
+        <legend>Что идёт в комплекте</legend>
+        <div id="kitOptions" class="kit-options"></div>
+        <input id="kitCustom" placeholder="Другое (через запятую)">
+      </fieldset>
+
+      <div class="actions">
+        <button type="button" id="cancelBtn" class="btn">Отмена</button>
+        <button type="submit" class="btn primary">Сохранить</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
