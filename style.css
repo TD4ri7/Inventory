@@ -52,6 +52,11 @@ h1 { margin: 0; font-size: 1.6rem; font-weight: 800; letter-spacing: -0.01em; }
 .user { padding-bottom: 16px; color: var(--head-muted); font-size: 0.875rem; }
 .link-btn { font: inherit; background: none; border: none; color: var(--tag); cursor: pointer; text-decoration: underline; padding: 0 0 0 6px; }
 
+.audit-bar { background: var(--tag); color: #1d2740; padding: 10px 20px; display: flex; gap: 12px 24px; align-items: center; flex-wrap: wrap; justify-content: center; position: sticky; top: 0; z-index: 5; }
+.audit-bar .btn { background: #fff; border-color: rgba(0,0,0,.2); color: #1d2740; }
+.audit-bar .btn.primary { background: #1d2740; color: #fff; border-color: #1d2740; }
+.audit-actions { display: flex; gap: 8px; }
+
 main { max-width: 1100px; margin: 0 auto; padding: 20px; }
 .banner { background: var(--busy-bg); color: var(--busy); padding: 12px 20px; text-align: center; }
 
@@ -94,6 +99,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-vi
 .badge.broken { background: var(--bad-bg); color: var(--bad); }
 .title { margin: 0; font-weight: 600; }
 .sub { margin: 2px 0 0; color: var(--muted); font-size: 0.9rem; }
+.sub.ok { color: var(--ok); }
+.sub.bad { color: var(--bad); }
 .defect { background: var(--bad-bg); color: var(--bad); border-radius: 8px; padding: 8px 10px; font-size: 0.9rem; }
 .kit-title { font-size: 0.85rem; color: var(--muted); margin: 0 0 6px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -104,6 +111,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-vi
 .chip.missing { border-color: var(--bad); background: var(--bad-bg); color: var(--bad); text-decoration: line-through; }
 span.chip { cursor: default; }
 .card-actions { display: flex; gap: 8px; margin-top: auto; flex-wrap: wrap; }
+.check-actions { display: flex; gap: 8px; }
+.check-actions .btn { flex: 1; }
+.btn.on-ok { background: var(--ok); border-color: var(--ok); color: #fff; }
+.btn.on-bad { background: var(--bad); border-color: var(--bad); color: #fff; }
 .empty { text-align: center; color: var(--muted); padding: 40px 0; }
 
 /* ---------- Диалоги ---------- */
@@ -130,6 +141,7 @@ legend { padding: 0 6px; color: var(--muted); font-size: 0.9rem; }
 .history { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow: auto; }
 .h-row { border-left: 3px solid var(--tag); padding: 2px 10px; font-size: 0.9rem; }
 .h-row small { display: block; color: var(--muted); }
+.report { white-space: pre-wrap; background: var(--bg); border-radius: 8px; padding: 12px; font: inherit; font-size: 0.9rem; max-height: 50vh; overflow: auto; margin: 0; }
 @media (max-width: 520px) { .detail-top { grid-template-columns: 1fr; } .qr { max-width: 160px; } }
 
 /* ---------- Печать наклеек ---------- */

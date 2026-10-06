@@ -21,6 +21,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const fmt = (ms) => new Date(ms).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" });
 const tsMs = (t) => (t && t.toMillis ? t.toMillis() : Date.now());
 const normPurpose = (p) => (p === "Учебный" || !p ? "Рабочий" : p);
+const label = (i) => `${i.inv} ${i.type}${i.brand ? " " + i.brand : ""}`;
 
 // ---------- Состояние ----------
 let app, auth, db, itemsCol, historyCol;
@@ -33,6 +34,7 @@ let items = [];
 let editingId = null;
 let unsubItems = null, unsubDetail = null, unsubJournal = null;
 let detailId = null, detailHistory = [];
+let audit = null;            // { start: мс, ids: Set }
 let deepLinkId = new URLSearchParams(location.search).get("item");
 
 function showBanner(text) {
@@ -74,6 +76,7 @@ function stopAll() {
   [unsubItems, unsubDetail, unsubJournal].forEach((u) => u && u());
   unsubItems = unsubDetail = unsubJournal = null;
   items = []; detailId = null;
+  audit = null;
   if (unsubUsers) unsubUsers();
   unsubUsers = null;
   document.querySelectorAll("dialog[open]").forEach((d) => d.close());
@@ -385,8 +388,9 @@ $("fType").innerHTML += TYPES.map((t) => `<option>${t}</option>`).join("");
 $("type").innerHTML = TYPES.map((t) => `<option>${t}</option>`).join("");
 $("kitOptions").innerHTML = KIT.map((k) => `<label class="check"><input type="checkbox" value="${k}"> ${k}</label>`).join("");
 
-["search", "fStatus", "fType", "fDefect"].forEach((id) => $(id).addEventListener("input", render));
+["search", "fStatus", "fType", "fDefect", "onlyUnchecked"].forEach((id) => $(id).addEventListener("input", render));
 
+const isChecked = (i) => audit && i.lastCheck && i.lastCheck.at >= audit.start;
 
 function filtered() {
   const q = $("search").value.trim().toLowerCase();
@@ -395,6 +399,7 @@ function filtered() {
     if ($("fType").value && i.type !== $("fType").value) return false;
     if ($("fDefect").checked && !i.hasDefect) return false;
     if (q && ![i.inv, i.brand, i.owner, i.type].join(" ").toLowerCase().includes(q)) return false;
+    if (audit && $("onlyUnchecked").checked && audit.ids.has(i.id) && isChecked(i)) return false;
     return true;
   });
 }
@@ -408,9 +413,21 @@ function render() {
     <span class="warn"><b>${cnt("Сломан")}</b>сломано</span>
     <span class="warn"><b>${items.filter((i) => i.hasDefect).length}</b>с дефектами</span>`;
 
+  $("auditBtn").hidden = !!audit;
+  $("auditBar").hidden = !audit;
+  if (audit) {
+    const scope = items.filter((i) => audit.ids.has(i.id));
+    $("auditProgress").textContent = `проверено ${scope.filter(isChecked).length} из ${scope.length}`;
+  }
 
   $("empty").hidden = items.length > 0;
   $("list").innerHTML = filtered().map(cardHtml).join("");
+}
+
+function lastCheckText(i) {
+  if (!i.lastCheck) return "";
+  const ok = i.lastCheck.result === "ok";
+  return `<p class="sub ${ok ? "ok" : "bad"}">${ok ? "✓ На месте" : "✗ Не найдено"} · ${fmt(i.lastCheck.at)}</p>`;
 }
 
 function cardHtml(i) {
@@ -420,6 +437,8 @@ function cardHtml(i) {
   const kit = (i.kit || []).map((k, idx) =>
     `<button class="chip ${k.ok ? "" : "missing"}" data-act="kit" data-id="${i.id}" data-idx="${idx}" title="Нажмите, чтобы отметить наличие">${esc(k.name)}</button>`
   ).join("");
+  const inAudit = audit && audit.ids.has(i.id);
+  const res = isChecked(i) ? i.lastCheck.result : null;
 
   return `
   <article class="card ${i.hasDefect || broken ? "has-defect" : ""}">
@@ -430,9 +449,15 @@ function cardHtml(i) {
     <div data-act="open" data-id="${i.id}">
       <p class="title">${esc(i.type)} ${esc(i.brand)}</p>
       <p class="sub">${esc(normPurpose(i.purpose))}${busy && i.owner ? " · владелец: " + esc(i.owner) : ""}</p>
+      ${lastCheckText(i)}
     </div>
     ${i.hasDefect ? `<div class="defect">Дефект: ${esc(i.defect || "не описан")}</div>` : ""}
     ${kit ? `<div><p class="kit-title">Комплект (нажмите, если чего-то нет)</p><div class="chips">${kit}</div></div>` : ""}
+    ${inAudit ? `
+      <div class="check-actions">
+        <button class="btn small ${res === "ok" ? "on-ok" : ""}" data-act="ok" data-id="${i.id}">На месте</button>
+        <button class="btn small ${res === "missing" ? "on-bad" : ""}" data-act="missing" data-id="${i.id}">Нет на месте</button>
+      </div>` : ""}
     <div class="card-actions">
       <button class="btn small" data-act="open" data-id="${i.id}">Подробнее</button>
       <button class="btn small" data-act="edit" data-id="${i.id}">Изменить</button>
@@ -452,6 +477,7 @@ $("list").addEventListener("click", async (e) => {
     if (act === "edit") openDialog(item);
     if (act === "del") await deleteItem(item);
     if (act === "kit") await toggleKit(item, +btn.dataset.idx);
+    if (act === "ok" || act === "missing") await markCheck(item, act);
   } catch (err) {
     alert("Ошибка: " + err.message);
   }
@@ -474,6 +500,54 @@ async function toggleKit(item, idx) {
   await batch.commit();
 }
 
+// ---------- Режим проверки ----------
+$("auditBtn").addEventListener("click", () => {
+  const list = filtered();
+  if (!list.length) return alert("В текущем списке нет техники. Сбросьте фильтры или выберите нужные.");
+  if (!confirm(`Начать проверку для ${list.length} шт. из текущего списка?\n\nЧтобы проверить только часть (например, ноутбуки или одного владельца), сначала выставьте фильтры или поиск.`)) return;
+  audit = { start: Date.now(), ids: new Set(list.map((i) => i.id)) };
+  $("onlyUnchecked").checked = false;
+  render();
+});
+
+async function markCheck(item, result) {
+  const batch = writeBatch(db);
+  batch.update(doc(db, "items", item.id), { lastCheck: { at: Date.now(), by: user.email, result } });
+  logTo(batch, item.id, item.inv, result === "ok" ? "Проверка: на месте" : "Проверка: НЕ НАЙДЕНО");
+  await batch.commit();
+}
+
+$("auditCancel").addEventListener("click", () => {
+  if (confirm("Выйти из режима проверки? Уже поставленные отметки сохранятся.")) { audit = null; render(); }
+});
+
+$("auditFinish").addEventListener("click", () => {
+  const scope = items.filter((i) => audit.ids.has(i.id));
+  const ok = scope.filter((i) => isChecked(i) && i.lastCheck.result === "ok");
+  const missing = scope.filter((i) => isChecked(i) && i.lastCheck.result === "missing");
+  const left = scope.filter((i) => !isChecked(i));
+  const lines = (arr) => (arr.length ? arr.map((i) => "  • " + label(i)).join("\n") : "  —");
+  $("reportText").textContent =
+`Инвентаризация от ${fmt(audit.start)}
+Проверял: ${user.email}
+
+Всего: ${scope.length} · На месте: ${ok.length} · Не найдено: ${missing.length} · Не проверено: ${left.length}
+
+Не найдено:
+${lines(missing)}
+
+Не проверено:
+${lines(left)}`;
+  $("reportDlg").showModal();
+  audit = null;
+  render();
+});
+
+$("reportCopy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("reportText").textContent); $("reportCopy").textContent = "Скопировано"; }
+  catch { alert("Не удалось скопировать, выделите текст вручную"); }
+});
+
 // ---------- Карточка устройства ----------
 function detailHtml(i) {
   const busy = i.status === "Занят";
@@ -489,6 +563,7 @@ function detailHtml(i) {
         <div>
           <p class="title">${esc(i.type)} ${esc(i.brand)}</p>
           <p class="sub">${esc(normPurpose(i.purpose))}${busy && i.owner ? " · владелец: " + esc(i.owner) : ""}</p>
+          ${lastCheckText(i)}
         </div>
       </div>
       <div>

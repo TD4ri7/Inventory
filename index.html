@@ -52,6 +52,7 @@
       <div class="top-inner">
         <h1>Инвентаризация школы</h1>
         <div class="top-actions">
+          <button id="auditBtn" class="btn">Начать проверку</button>
           <button id="labelsBtn" class="btn">Наклейки</button>
           <button id="journalBtn" class="btn">Журнал</button>
           <button id="addBtn" class="btn primary">Добавить технику</button>
@@ -65,6 +66,15 @@
           <button id="logoutBtn" class="link-btn">Выйти</button></div>
       </div>
     </header>
+
+    <div id="auditBar" class="audit-bar" hidden>
+      <div><b>Идёт проверка:</b> <span id="auditProgress"></span></div>
+      <label class="check"><input type="checkbox" id="onlyUnchecked"> Только непроверенные</label>
+      <div class="audit-actions">
+        <button id="auditFinish" class="btn primary small">Завершить</button>
+        <button id="auditCancel" class="btn small">Выйти из проверки</button>
+      </div>
+    </div>
 
     <main>
       <section class="filters">
@@ -190,6 +200,18 @@
       <p class="muted">Последние 100 записей по всей технике</p>
       <div id="journalList" class="history"></div>
       <div class="actions"><button class="btn" data-close="journalDlg">Закрыть</button></div>
+    </div>
+  </dialog>
+
+  <!-- Отчёт по проверке -->
+  <dialog id="reportDlg" class="wide">
+    <div class="pad">
+      <h2>Итоги проверки</h2>
+      <pre id="reportText" class="report"></pre>
+      <div class="actions">
+        <button id="reportCopy" class="btn">Скопировать</button>
+        <button class="btn primary" data-close="reportDlg">Закрыть</button>
+      </div>
     </div>
   </dialog>
 
