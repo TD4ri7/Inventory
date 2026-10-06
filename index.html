@@ -57,6 +57,8 @@
       <div class="top-bottom">
         <div class="stats" id="stats"></div>
         <div class="user"><span id="userEmail"></span>
+          <button id="pwdBtn" class="link-btn">Пароль</button>
+          <button id="usersBtn" class="link-btn" hidden>Пользователи</button>
           <button id="logoutBtn" class="link-btn">Выйти</button></div>
       </div>
     </header>
@@ -133,6 +135,45 @@
     </form>
   </dialog>
 
+  <!-- Пользователи (только администратор) -->
+  <dialog id="usersDlg" class="wide">
+    <div class="pad">
+      <h2>Пользователи</h2>
+      <p class="muted">Здесь вы создаёте аккаунты сотрудников. Они входят на сайте по этой почте и паролю. Пароль можно показать им сразу после создания.</p>
+      <div id="usersList" class="users"></div>
+      <form id="usersForm" class="add-user">
+        <h3>Добавить пользователя</h3>
+        <div class="grid">
+          <label>Почта <input id="addEmail" type="email" required autocomplete="off"></label>
+          <label>Пароль (от 6 символов) <input id="addPass" type="text" required minlength="6" autocomplete="off"></label>
+          <label>Роль
+            <select id="addRole">
+              <option value="staff">Сотрудник</option>
+              <option value="admin">Администратор</option>
+            </select>
+          </label>
+        </div>
+        <p id="addError" class="login-error" hidden></p>
+        <div class="actions"><button type="submit" id="addUserBtn" class="btn primary">Создать аккаунт</button></div>
+      </form>
+      <div class="actions"><button class="btn" data-close="usersDlg">Закрыть</button></div>
+    </div>
+  </dialog>
+
+  <!-- Смена своего пароля -->
+  <dialog id="pwdDlg">
+    <form id="pwdForm">
+      <h2>Смена пароля</h2>
+      <label>Текущий пароль <input id="curPass" type="password" required autocomplete="current-password"></label>
+      <label>Новый пароль <input id="newPass" type="password" required minlength="6" autocomplete="new-password"></label>
+      <label>Повторите новый пароль <input id="newPass2" type="password" required autocomplete="new-password"></label>
+      <p id="pwdError" class="login-error" hidden></p>
+      <div class="actions">
+        <button type="button" class="btn" data-close="pwdDlg">Отмена</button>
+        <button type="submit" id="pwdSave" class="btn primary">Сохранить</button>
+      </div>
+    </form>
+  </dialog>
 
 
   <script type="module" src="app.js"></script>

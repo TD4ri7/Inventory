@@ -121,3 +121,10 @@ legend { padding: 0 6px; color: var(--muted); font-size: 0.9rem; }
 .actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 @media (max-width: 520px) { .grid { grid-template-columns: 1fr; } }
 
+#pwdForm label, .add-user label { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; color: var(--muted); }
+.users { display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow: auto; }
+.user-row { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+.user-row small { display: block; color: var(--bad); }
+.user-row select { width: auto; }
+.user-btns { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
+.add-user { padding: 14px 0 0; border-top: 1px solid var(--line); }

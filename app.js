@@ -1,11 +1,14 @@
 import {
   initializeApp,
+  deleteApp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword,
+  updatePassword, reauthenticateWithCredential, EmailAuthProvider, sendPasswordResetEmail,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, writeBatch, onSnapshot, query, orderBy, serverTimestamp,
+  updateDoc,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -22,6 +25,7 @@ let user = null;
 let profile = null;          // { email, role, active }
 let suppressAuth = false;    // true на время создания первого администратора
 let pendingLoginError = "";
+let unsubUsers = null;
 let items = [];
 let editingId = null;
 let unsubItems = null;
@@ -62,6 +66,8 @@ function stopAll() {
   if (unsubItems) unsubItems();
   unsubItems = null;
   items = [];
+  if (unsubUsers) unsubUsers();
+  unsubUsers = null;
   document.querySelectorAll("dialog[open]").forEach((d) => d.close());
 }
 
@@ -106,6 +112,7 @@ async function handleUser(u) {
   }
   user = u; profile = prof;
   $("userEmail").textContent = `${u.email} · ${prof.role === "admin" ? "администратор" : "сотрудник"}`;
+  $("usersBtn").hidden = prof.role !== "admin";
   $("loginView").hidden = true;
   $("appView").hidden = false;
   listenItems();
@@ -187,6 +194,114 @@ $("logoutBtn").addEventListener("click", () => signOut(auth));
 document.querySelectorAll("[data-close]").forEach((b) =>
   b.addEventListener("click", () => $(b.dataset.close).close()));
 
+// ---------- Пользователи и пароль ----------
+function userRowHtml(u) {
+  const me = u.id === user.uid;
+  const active = u.active === true;
+  return `
+  <div class="user-row">
+    <div><b>${esc(u.email)}</b>${me ? " (вы)" : ""}${active ? "" : `<small>доступ отключён</small>`}</div>
+    <select data-uact="role" data-id="${u.id}" ${me ? "disabled" : ""}>
+      <option value="staff" ${u.role === "staff" ? "selected" : ""}>Сотрудник</option>
+      <option value="admin" ${u.role === "admin" ? "selected" : ""}>Администратор</option>
+    </select>
+    <div class="user-btns">
+      <button class="btn small" data-uact="reset" data-email="${esc(u.email)}">Письмо для сброса пароля</button>
+      ${me ? "" : `<button class="btn small ${active ? "danger" : ""}" data-uact="toggle" data-id="${u.id}" data-active="${active}">${active ? "Отключить доступ" : "Включить доступ"}</button>`}
+    </div>
+  </div>`;
+}
+
+$("usersBtn").addEventListener("click", () => {
+  $("usersList").innerHTML = `<p class="muted">Загрузка…</p>`;
+  $("addError").hidden = true;
+  if (unsubUsers) unsubUsers();
+  unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
+    const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      .sort((x, y) => (x.email || "").localeCompare(y.email || ""));
+    $("usersList").innerHTML = rows.map(userRowHtml).join("");
+  }, (err) => { $("usersList").textContent = "Ошибка: " + err.message; });
+  $("usersDlg").showModal();
+});
+$("usersDlg").addEventListener("close", () => { if (unsubUsers) unsubUsers(); unsubUsers = null; });
+
+$("usersList").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-uact]");
+  if (!b) return;
+  try {
+    if (b.dataset.uact === "toggle") {
+      const on = b.dataset.active === "true";
+      if (on && !confirm("Отключить доступ этому пользователю?")) return;
+      await updateDoc(doc(db, "users", b.dataset.id), { active: !on });
+    }
+    if (b.dataset.uact === "reset") {
+      await sendPasswordResetEmail(auth, b.dataset.email);
+      alert("Письмо отправлено. Оно дойдёт, только если почта настоящая.");
+    }
+  } catch (ex) { alert(authMsg(ex)); }
+});
+$("usersList").addEventListener("change", async (e) => {
+  const s = e.target.closest("[data-uact='role']");
+  if (!s) return;
+  try { await updateDoc(doc(db, "users", s.dataset.id), { role: s.value }); }
+  catch (ex) { alert(authMsg(ex)); }
+});
+
+// Создание аккаунта сотрудника. Отдельное подключение нужно, чтобы вы не вышли из своего аккаунта.
+$("usersForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const err = $("addError");
+  err.hidden = true;
+  const email = $("addEmail").value.trim();
+  const pass = $("addPass").value;
+  const role = $("addRole").value;
+  $("addUserBtn").disabled = true;
+  let sec;
+  try {
+    sec = initializeApp(firebaseConfig, "secondary");
+    const sAuth = getAuth(sec);
+    const cred = await createUserWithEmailAndPassword(sAuth, email, pass);
+    await signOut(sAuth);
+    const batch = writeBatch(db);
+    batch.set(doc(db, "users", cred.user.uid), {
+      email, role, active: true, createdAt: serverTimestamp(), createdBy: user.email
+    });
+    await batch.commit();
+    $("usersForm").reset();
+  } catch (ex) {
+    err.textContent = authMsg(ex);
+    err.hidden = false;
+  } finally {
+    if (sec) await deleteApp(sec);
+    $("addUserBtn").disabled = false;
+  }
+});
+
+// Смена своего пароля
+$("pwdBtn").addEventListener("click", () => {
+  $("pwdForm").reset();
+  $("pwdError").hidden = true;
+  $("pwdDlg").showModal();
+});
+$("pwdForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const err = $("pwdError");
+  err.hidden = true;
+  if ($("newPass").value !== $("newPass2").value) { err.textContent = "Новые пароли не совпадают"; err.hidden = false; return; }
+  $("pwdSave").disabled = true;
+  try {
+    const cur = auth.currentUser;
+    await reauthenticateWithCredential(cur, EmailAuthProvider.credential(cur.email, $("curPass").value));
+    await updatePassword(cur, $("newPass").value);
+    $("pwdDlg").close();
+    alert("Пароль изменён");
+  } catch (ex) {
+    err.textContent = authMsg(ex);
+    err.hidden = false;
+  } finally {
+    $("pwdSave").disabled = false;
+  }
+});
 
 // ---------- Фильтры и список ----------
 $("fType").innerHTML += TYPES.map((t) => `<option>${t}</option>`).join("");
