@@ -133,6 +133,13 @@
         <legend>Дефект</legend>
         <label class="check"><input type="checkbox" id="hasDefect"> Есть дефект</label>
         <textarea id="defect" rows="2" placeholder="Что сломано или повреждено"></textarea>
+        <div class="photo-row">
+          <img id="photoPreview" alt="Фото дефекта" hidden>
+          <label id="photoLabel" class="btn small file-btn check">Добавить фото
+            <input id="photoInput" type="file" accept="image/*" hidden>
+          </label>
+          <button type="button" id="photoRemove" class="btn small danger" hidden>Убрать фото</button>
+        </div>
       </fieldset>
 
       <fieldset>

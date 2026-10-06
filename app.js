@@ -32,10 +32,12 @@ let pendingLoginError = "";
 let unsubUsers = null;
 let items = [];
 let editingId = null;
+let pendingPhoto;            // undefined = не менялось, null = убрать, строка = новое фото
 let unsubItems = null, unsubDetail = null, unsubJournal = null;
 let detailId = null, detailHistory = [];
 let audit = null;            // { start: мс, ids: Set }
 let deepLinkId = new URLSearchParams(location.search).get("item");
+const photoCache = new Map();
 
 function showBanner(text) {
   const b = $("banner");
@@ -451,7 +453,7 @@ function cardHtml(i) {
       <p class="sub">${esc(normPurpose(i.purpose))}${busy && i.owner ? " · владелец: " + esc(i.owner) : ""}</p>
       ${lastCheckText(i)}
     </div>
-    ${i.hasDefect ? `<div class="defect">Дефект: ${esc(i.defect || "не описан")}</div>` : ""}
+    ${i.hasDefect ? `<div class="defect">Дефект: ${esc(i.defect || "не описан")}${i.hasPhoto ? " · есть фото" : ""}</div>` : ""}
     ${kit ? `<div><p class="kit-title">Комплект (нажмите, если чего-то нет)</p><div class="chips">${kit}</div></div>` : ""}
     ${inAudit ? `
       <div class="check-actions">
@@ -487,6 +489,7 @@ async function deleteItem(item) {
   if (!confirm(`Удалить ${item.inv}? Запись в журнале останется.`)) return;
   const batch = writeBatch(db);
   batch.delete(doc(db, "items", item.id));
+  batch.delete(doc(db, "photos", item.id));
   logTo(batch, item.id, item.inv, "Удалено из базы");
   await batch.commit();
 }
@@ -549,6 +552,16 @@ $("reportCopy").addEventListener("click", async () => {
 });
 
 // ---------- Карточка устройства ----------
+async function getPhoto(item) {
+  if (!item?.hasPhoto) return null;
+  const key = `${item.id}:${item.photoAt}`;
+  if (!photoCache.has(key)) {
+    const s = await getDoc(doc(db, "photos", item.id));
+    photoCache.set(key, s.exists() ? s.data().data : null);
+  }
+  return photoCache.get(key);
+}
+
 function detailHtml(i) {
   const busy = i.status === "Занят";
   const badgeClass = i.status === "Сломан" ? "broken" : busy ? "busy" : "free";
@@ -572,6 +585,7 @@ function detailHtml(i) {
       </div>
     </div>
     ${i.hasDefect ? `<div class="defect">Дефект: ${esc(i.defect || "не описан")}</div>` : ""}
+    ${i.hasPhoto ? `<img id="detailPhoto" class="photo" alt="Фото дефекта" hidden>` : ""}
     ${kit ? `<div><p class="kit-title">Комплект</p><div class="chips">${kit}</div></div>` : ""}
     <div>
       <h3>История</h3>
@@ -588,6 +602,12 @@ function refreshDetail() {
   const item = items.find((i) => i.id === detailId);
   if (!item) { $("detailDlg").close(); return; }
   $("detailBody").innerHTML = detailHtml(item);
+  if (item.hasPhoto) {
+    getPhoto(item).then((src) => {
+      const img = $("detailPhoto");
+      if (src && img && detailId === item.id) { img.src = src; img.hidden = false; }
+    }).catch(() => {});
+  }
 }
 
 function openDetail(id) {
@@ -638,14 +658,54 @@ function syncForm() {
   const d = $("hasDefect").checked;
   $("defect").disabled = !d;
   if (!d) $("defect").value = "";
+  $("photoInput").disabled = !d;
+  $("photoLabel").classList.toggle("disabled", !d);
+  if (!d) setPreview(null);
 }
 $("status").addEventListener("change", syncForm);
 $("hasDefect").addEventListener("change", () => {
+  if (!$("hasDefect").checked) pendingPhoto = null;
   syncForm();
 });
 
+function setPreview(src) {
+  $("photoPreview").hidden = !src;
+  if (src) $("photoPreview").src = src;
+  $("photoRemove").hidden = !src;
+}
+
+function compressImage(file, max = 800, quality = 0.68) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * k);
+      c.height = Math.round(img.height * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => reject(new Error("Не удалось прочитать фото"));
+    img.src = url;
+  });
+}
+
+$("photoInput").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    pendingPhoto = await compressImage(file);
+    setPreview(pendingPhoto);
+  } catch (err) { alert(err.message); }
+  e.target.value = "";
+});
+$("photoRemove").addEventListener("click", () => { pendingPhoto = null; setPreview(null); });
+
 function openDialog(item) {
   editingId = item?.id ?? null;
+  pendingPhoto = undefined;
   $("dlgTitle").textContent = item ? "Изменить технику" : "Новая техника";
   $("type").value = item?.type ?? TYPES[0];
   $("inv").value = item?.inv ?? "";
@@ -655,12 +715,14 @@ function openDialog(item) {
   $("owner").value = item?.owner ?? "";
   $("hasDefect").checked = !!item?.hasDefect;
   $("defect").value = item?.defect ?? "";
+  setPreview(null);
 
   const names = (item?.kit || []).map((k) => k.name);
   document.querySelectorAll("#kitOptions input").forEach((c) => (c.checked = names.includes(c.value)));
   $("kitCustom").value = names.filter((n) => !KIT.includes(n)).join(", ");
   syncForm();
   dlg.showModal();
+  if (item?.hasPhoto) getPhoto(item).then((src) => { if (pendingPhoto === undefined) setPreview(src); }).catch(() => {});
 }
 
 $("addBtn").addEventListener("click", () => openDialog(null));
@@ -692,6 +754,17 @@ $("form").addEventListener("submit", async (e) => {
     const ref = old ? doc(db, "items", old.id) : doc(itemsCol);
     const id = ref.id;
     const extra = [];
+    // Фото дефекта
+    let hasPhoto = !!old?.hasPhoto, photoAt = old?.photoAt ?? null;
+    if (!data.hasDefect || pendingPhoto === null) {
+      if (hasPhoto) { batch.delete(doc(db, "photos", id)); hasPhoto = false; photoAt = null; extra.push("Фото дефекта удалено"); }
+    } else if (typeof pendingPhoto === "string") {
+      if (pendingPhoto.length > 900000) throw new Error("Фото слишком большое");
+      batch.set(doc(db, "photos", id), { data: pendingPhoto });
+      hasPhoto = true; photoAt = Date.now(); extra.push("Добавлено фото дефекта");
+    }
+    data.hasPhoto = hasPhoto;
+    data.photoAt = photoAt;
 
     if (old) {
       [...diffs(old, data), ...extra].forEach((t) => logTo(batch, id, data.inv, t));
