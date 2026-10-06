@@ -33,6 +33,7 @@ let items = [];
 let editingId = null;
 let unsubItems = null, unsubDetail = null, unsubJournal = null;
 let detailId = null, detailHistory = [];
+let deepLinkId = new URLSearchParams(location.search).get("item");
 
 function showBanner(text) {
   const b = $("banner");
@@ -61,6 +62,7 @@ function listenItems() {
     showBanner("");
     render();
     if (detailId) refreshDetail();
+    handleDeepLink();
   }, (err) => {
     showBanner(err.code === "permission-denied"
       ? "Нет доступа к базе. Обновите правила Firestore (см. инструкцию) или попросите администратора включить вам доступ."
@@ -75,6 +77,15 @@ function stopAll() {
   if (unsubUsers) unsubUsers();
   unsubUsers = null;
   document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+}
+
+function handleDeepLink() {
+  if (!deepLinkId) return;
+  const id = deepLinkId;
+  deepLinkId = null;
+  history.replaceState(null, "", location.pathname);
+  if (items.some((i) => i.id === id)) openDetail(id);
+  else showBanner("Устройство из QR-кода не найдено (возможно, оно удалено).");
 }
 
 // ---------- Вход / выход ----------
@@ -160,7 +171,7 @@ $("loginForm").addEventListener("submit", async (e) => {
   }
 });
 
-// Перый запуск: создаём администратора и отмечаем, что настройка выполнена
+// Первый запуск: создаём администратора и отмечаем, что настройка выполнена
 $("setupForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const err = $("setupError");
@@ -343,6 +354,32 @@ function diffs(o, n) {
   return out;
 }
 
+// ---------- QR и печать ----------
+const itemUrl = (id) => `${location.origin}${location.pathname}?item=${id}`;
+
+function qrSvg(text) {
+  if (typeof qrcode === "undefined") return `<p class="muted">QR недоступен (не загрузилась библиотека)</p>`;
+  const q = qrcode(0, "M");
+  q.addData(text);
+  q.make();
+  return q.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+}
+
+function printLabels(list) {
+  if (!list.length) return alert("Нет техники для печати");
+  $("printArea").innerHTML = list.map((i) => `
+    <div class="label">
+      <div class="label-qr">${qrSvg(itemUrl(i.id))}</div>
+      <div class="label-text"><b>${esc(i.inv)}</b><span>${esc(i.type)} ${esc(i.brand)}</span></div>
+    </div>`).join("");
+  window.print();
+}
+$("labelsBtn").addEventListener("click", () => {
+  const list = filtered();
+  if (list.length > 0 && confirm(`Напечатать наклейки с QR-кодом для ${list.length} шт. из текущего списка?`)) printLabels(list);
+  else if (list.length === 0) alert("Нет техники для печати");
+});
+
 // ---------- Фильтры и список ----------
 $("fType").innerHTML += TYPES.map((t) => `<option>${t}</option>`).join("");
 $("type").innerHTML = TYPES.map((t) => `<option>${t}</option>`).join("");
@@ -443,7 +480,8 @@ function detailHtml(i) {
   const badgeClass = i.status === "Сломан" ? "broken" : busy ? "busy" : "free";
   const kit = (i.kit || []).map((k) => `<span class="chip ${k.ok ? "" : "missing"}">${esc(k.name)}</span>`).join("");
   return `
-    <div style="display:flex;flex-direction:column;gap:10px">
+    <div class="detail-top">
+      <div style="display:flex;flex-direction:column;gap:10px">
         <div class="card-head" style="justify-content:flex-start;gap:12px">
           <span class="inv">${esc(i.inv)}</span>
           <span class="badge ${badgeClass}">${esc(i.status)}</span>
@@ -452,6 +490,11 @@ function detailHtml(i) {
           <p class="title">${esc(i.type)} ${esc(i.brand)}</p>
           <p class="sub">${esc(normPurpose(i.purpose))}${busy && i.owner ? " · владелец: " + esc(i.owner) : ""}</p>
         </div>
+      </div>
+      <div>
+        <div class="qr">${qrSvg(itemUrl(i.id))}</div>
+        <p class="qr-cap">QR-код устройства</p>
+      </div>
     </div>
     ${i.hasDefect ? `<div class="defect">Дефект: ${esc(i.defect || "не описан")}</div>` : ""}
     ${kit ? `<div><p class="kit-title">Комплект</p><div class="chips">${kit}</div></div>` : ""}
@@ -460,6 +503,7 @@ function detailHtml(i) {
       <div id="detailHistory" class="history">${historyHtml(detailHistory)}</div>
     </div>
     <div class="actions">
+      <button class="btn" data-dact="print">Печать наклейки</button>
       <button class="btn" data-dact="edit">Изменить</button>
       <button class="btn primary" data-dact="close">Закрыть</button>
     </div>`;
@@ -494,6 +538,7 @@ $("detailBody").addEventListener("click", (e) => {
   const item = items.find((i) => i.id === detailId);
   if (!act || !item) return;
   if (act === "close") $("detailDlg").close();
+  if (act === "print") printLabels([item]);
   if (act === "edit") { $("detailDlg").close(); openDialog(item); }
 });
 
