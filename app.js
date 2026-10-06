@@ -160,7 +160,7 @@ $("loginForm").addEventListener("submit", async (e) => {
   }
 });
 
-// Первый запуск: создаём администратора и отмечаем, что настройка выполнена
+// Перый запуск: создаём администратора и отмечаем, что настройка выполнена
 $("setupForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const err = $("setupError");
