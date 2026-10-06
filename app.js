@@ -1,9 +1,11 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
+  initializeApp,
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, collection, doc, writeBatch, onSnapshot, query, orderBy, serverTimestamp,
+  getFirestore, collection, doc, getDoc, writeBatch, onSnapshot, query, orderBy, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -17,6 +19,9 @@ const normPurpose = (p) => (p === "Учебный" || !p ? "Рабочий" : p)
 // ---------- Состояние ----------
 let app, auth, db, itemsCol;
 let user = null;
+let profile = null;          // { email, role, active }
+let suppressAuth = false;    // true на время создания первого администратора
+let pendingLoginError = "";
 let items = [];
 let editingId = null;
 let unsubItems = null;
@@ -37,19 +42,7 @@ if (!configured) {
   db = getFirestore(app);
   itemsCol = collection(db, "items");
 
-  onAuthStateChanged(auth, (u) => {
-    user = u;
-    if (u) {
-      $("userEmail").textContent = u.email;
-      $("loginView").hidden = true;
-      $("appView").hidden = false;
-      listenItems();
-    } else {
-      stopAll();
-      $("appView").hidden = true;
-      $("loginView").hidden = false;
-    }
-  });
+  onAuthStateChanged(auth, (u) => { if (!suppressAuth) handleUser(u); });
 }
 
 function listenItems() {
@@ -60,7 +53,7 @@ function listenItems() {
     render();
   }, (err) => {
     showBanner(err.code === "permission-denied"
-      ? "Нет доступа к базе. Проверьте, что ваша почта указана в правилах Firestore."
+      ? "Нет доступа к базе. Обновите правила Firestore (см. инструкцию) или попросите администратора включить вам доступ."
       : "Не удалось загрузить данные: " + err.message);
   });
 }
@@ -73,6 +66,71 @@ function stopAll() {
 }
 
 // ---------- Вход / выход ----------
+function authMsg(ex) {
+  const map = {
+    "auth/invalid-credential": "Неверная почта или пароль",
+    "auth/wrong-password": "Неверная почта или пароль",
+    "auth/user-not-found": "Неверная почта или пароль",
+    "auth/invalid-email": "Некорректная почта",
+    "auth/missing-password": "Введите пароль",
+    "auth/weak-password": "Пароль слишком простой (минимум 6 символов)",
+    "auth/email-already-in-use": "Эта почта уже зарегистрирована. Используйте другую или включите доступ существующему пользователю в списке.",
+    "auth/too-many-requests": "Слишком много попыток, подождите несколько минут",
+    "auth/operation-not-allowed": "Вход по паролю не включён в Firebase (Authentication → Sign-in method → Email/Password)",
+    "auth/unauthorized-domain": "Адрес сайта не добавлен в Firebase (Authentication → Settings → Authorized domains)",
+    "permission-denied": "Нет прав на запись. Опубликованы ли правила Firestore из инструкции?"
+  };
+  return map[ex.code] || "Ошибка: " + (ex.code || ex.message);
+}
+
+async function handleUser(u) {
+  if (!u) {
+    user = null; profile = null;
+    stopAll();
+    $("appView").hidden = true;
+    await showLoginOrSetup();
+    return;
+  }
+  let prof = null;
+  try {
+    const s = await getDoc(doc(db, "users", u.uid));
+    prof = s.exists() ? s.data() : null;
+  } catch (err) { prof = null; }
+
+  if (!prof || prof.active !== true) {
+    pendingLoginError = prof
+      ? "Доступ для этой почты отключён. Обратитесь к администратору."
+      : "У этой почты нет доступа. Попросите администратора добавить вас в «Пользователи».";
+    await signOut(auth);   // после выхода сработает handleUser(null) и покажет сообщение
+    return;
+  }
+  user = u; profile = prof;
+  $("userEmail").textContent = `${u.email} · ${prof.role === "admin" ? "администратор" : "сотрудник"}`;
+  $("loginView").hidden = true;
+  $("appView").hidden = false;
+  listenItems();
+}
+
+async function showLoginOrSetup() {
+  let setupDone = true;
+  try {
+    setupDone = (await getDoc(doc(db, "config", "setup"))).exists();
+  } catch (err) {
+    showBanner("Не удалось обратиться к базе. Проверьте, что правила Firestore из инструкции опубликованы.");
+  }
+  $("loginError").hidden = true;
+  $("setupError").hidden = true;
+  $("loginForm").hidden = !setupDone;
+  $("setupForm").hidden = setupDone;
+  if (pendingLoginError) {
+    const el = setupDone ? $("loginError") : $("setupError");
+    el.textContent = pendingLoginError;
+    el.hidden = false;
+    pendingLoginError = "";
+  }
+  $("loginView").hidden = false;
+}
+
 $("loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const err = $("loginError");
@@ -82,22 +140,53 @@ $("loginForm").addEventListener("submit", async (e) => {
     await signInWithEmailAndPassword(auth, $("email").value.trim(), $("password").value);
     $("password").value = "";
   } catch (ex) {
-    const map = {
-      "auth/invalid-credential": "Неверная почта или пароль",
-      "auth/wrong-password": "Неверная почта или пароль",
-      "auth/user-not-found": "Неверная почта или пароль",
-      "auth/invalid-email": "Некорректная почта",
-      "auth/too-many-requests": "Слишком много попыток, подождите несколько минут",
-      "auth/operation-not-allowed": "Вход по паролю не включён в Firebase (Authentication → Sign-in method)",
-      "auth/unauthorized-domain": "Адрес сайта не добавлен в Firebase (Authentication → Settings → Authorized domains)"
-    };
-    err.textContent = map[ex.code] || "Ошибка входа: " + (ex.code || ex.message);
+    err.textContent = authMsg(ex);
     err.hidden = false;
   } finally {
     $("loginBtn").disabled = false;
   }
 });
+
+// Первый запуск: создаём администратора и отмечаем, что настройка выполнена
+$("setupForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const err = $("setupError");
+  err.hidden = true;
+  const email = $("setupEmail").value.trim();
+  const p1 = $("setupPass").value;
+  if (p1 !== $("setupPass2").value) { err.textContent = "Пароли не совпадают"; err.hidden = false; return; }
+  $("setupBtn").disabled = true;
+  suppressAuth = true;
+  try {
+    let cred;
+    try {
+      cred = await createUserWithEmailAndPassword(auth, email, p1);
+    } catch (ex) {
+      // аккаунт мог создаться при прошлой неудачной попытке
+      if (ex.code === "auth/email-already-in-use") cred = await signInWithEmailAndPassword(auth, email, p1);
+      else throw ex;
+    }
+    const batch = writeBatch(db);
+    batch.set(doc(db, "users", cred.user.uid), { email, role: "admin", active: true, createdAt: serverTimestamp() });
+    batch.set(doc(db, "config", "setup"), { by: cred.user.uid, at: serverTimestamp() });
+    await batch.commit();
+    suppressAuth = false;
+    await handleUser(auth.currentUser);
+  } catch (ex) {
+    suppressAuth = false;
+    err.textContent = authMsg(ex);
+    err.hidden = false;
+    if (auth.currentUser) await signOut(auth);
+  } finally {
+    $("setupBtn").disabled = false;
+  }
+});
+
 $("logoutBtn").addEventListener("click", () => signOut(auth));
+
+document.querySelectorAll("[data-close]").forEach((b) =>
+  b.addEventListener("click", () => $(b.dataset.close).close()));
+
 
 // ---------- Фильтры и список ----------
 $("fType").innerHTML += TYPES.map((t) => `<option>${t}</option>`).join("");

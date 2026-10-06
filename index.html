@@ -26,6 +26,23 @@
       <p id="loginError" class="login-error" hidden></p>
       <button id="loginBtn" type="submit" class="btn primary">Войти</button>
     </form>
+
+    <!-- Первый запуск: создание администратора -->
+    <form id="setupForm" class="login-card" hidden>
+      <h1>Первый запуск</h1>
+      <p class="muted">Создайте аккаунт администратора. Позже вы сможете добавлять сотрудников.</p>
+      <label>Почта
+        <input id="setupEmail" type="email" required autocomplete="username">
+      </label>
+      <label>Пароль (от 6 символов)
+        <input id="setupPass" type="password" required minlength="6" autocomplete="new-password">
+      </label>
+      <label>Повторите пароль
+        <input id="setupPass2" type="password" required autocomplete="new-password">
+      </label>
+      <p id="setupError" class="login-error" hidden></p>
+      <button id="setupBtn" type="submit" class="btn primary">Создать администратора</button>
+    </form>
   </section>
 
   <!-- Основное приложение -->
@@ -39,7 +56,8 @@
       </div>
       <div class="top-bottom">
         <div class="stats" id="stats"></div>
-        <div class="user"><span id="userEmail"></span> <button id="logoutBtn" class="link-btn">Выйти</button></div>
+        <div class="user"><span id="userEmail"></span>
+          <button id="logoutBtn" class="link-btn">Выйти</button></div>
       </div>
     </header>
 
@@ -114,6 +132,7 @@
       </div>
     </form>
   </dialog>
+
 
 
   <script type="module" src="app.js"></script>
