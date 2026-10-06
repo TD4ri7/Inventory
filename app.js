@@ -9,6 +9,7 @@ import {
 import {
   getFirestore, collection, doc, getDoc, writeBatch, onSnapshot, query, orderBy, serverTimestamp,
   updateDoc,
+  where, limit,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -17,10 +18,12 @@ const KIT = ["Гарнитура", "Мышь", "Клавиатура", "Заря
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = (ms) => new Date(ms).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" });
+const tsMs = (t) => (t && t.toMillis ? t.toMillis() : Date.now());
 const normPurpose = (p) => (p === "Учебный" || !p ? "Рабочий" : p);
 
 // ---------- Состояние ----------
-let app, auth, db, itemsCol;
+let app, auth, db, itemsCol, historyCol;
 let user = null;
 let profile = null;          // { email, role, active }
 let suppressAuth = false;    // true на время создания первого администратора
@@ -28,7 +31,8 @@ let pendingLoginError = "";
 let unsubUsers = null;
 let items = [];
 let editingId = null;
-let unsubItems = null;
+let unsubItems = null, unsubDetail = null, unsubJournal = null;
+let detailId = null, detailHistory = [];
 
 function showBanner(text) {
   const b = $("banner");
@@ -45,6 +49,7 @@ if (!configured) {
   auth = getAuth(app);
   db = getFirestore(app);
   itemsCol = collection(db, "items");
+  historyCol = collection(db, "history");
 
   onAuthStateChanged(auth, (u) => { if (!suppressAuth) handleUser(u); });
 }
@@ -55,6 +60,7 @@ function listenItems() {
     items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     showBanner("");
     render();
+    if (detailId) refreshDetail();
   }, (err) => {
     showBanner(err.code === "permission-denied"
       ? "Нет доступа к базе. Обновите правила Firestore (см. инструкцию) или попросите администратора включить вам доступ."
@@ -63,9 +69,9 @@ function listenItems() {
 }
 
 function stopAll() {
-  if (unsubItems) unsubItems();
-  unsubItems = null;
-  items = [];
+  [unsubItems, unsubDetail, unsubJournal].forEach((u) => u && u());
+  unsubItems = unsubDetail = unsubJournal = null;
+  items = []; detailId = null;
   if (unsubUsers) unsubUsers();
   unsubUsers = null;
   document.querySelectorAll("dialog[open]").forEach((d) => d.close());
@@ -303,6 +309,40 @@ $("pwdForm").addEventListener("submit", async (e) => {
   }
 });
 
+// ---------- История ----------
+function logTo(batch, itemId, inv, text) {
+  batch.set(doc(historyCol), { itemId, inv, text, by: user.email, at: serverTimestamp() });
+}
+
+function historyHtml(list) {
+  if (!list.length) return `<p class="muted">Записей пока нет</p>`;
+  return list.map((h) => `
+    <div class="h-row">${h.inv && !h.hideInv ? "<b>" + esc(h.inv) + "</b> · " : ""}${esc(h.text)}
+      <small>${fmt(tsMs(h.at))} · ${esc(h.by)}</small>
+    </div>`).join("");
+}
+
+function diffs(o, n) {
+  const out = [];
+  if (o.status !== n.status) out.push(`Статус: ${o.status} → ${n.status}`);
+  const oo = o.owner || "";
+  if (oo !== n.owner) out.push(n.owner ? `Владелец: ${oo || "—"} → ${n.owner}` : `Владелец снят (был: ${oo})`);
+  if (!!o.hasDefect !== n.hasDefect || (o.defect || "") !== n.defect) {
+    out.push(n.hasDefect ? `Дефект: ${n.defect || "без описания"}` : "Дефект устранён");
+  }
+  if (normPurpose(o.purpose) !== n.purpose) out.push(`Назначение: ${normPurpose(o.purpose)} → ${n.purpose}`);
+  const oldKit = Object.fromEntries((o.kit || []).map((k) => [k.name, k.ok]));
+  const newNames = n.kit.map((k) => k.name);
+  newNames.filter((x) => !(x in oldKit)).forEach((x) => out.push(`В комплект добавлено: ${x}`));
+  Object.keys(oldKit).filter((x) => !newNames.includes(x)).forEach((x) => out.push(`Из комплекта убрано: ${x}`));
+  const meta = [];
+  if (o.type !== n.type) meta.push(`тип ${o.type} → ${n.type}`);
+  if (o.inv !== n.inv) meta.push(`номер ${o.inv} → ${n.inv}`);
+  if ((o.brand || "") !== n.brand) meta.push(`бренд ${o.brand || "—"} → ${n.brand || "—"}`);
+  if (meta.length) out.push("Изменено: " + meta.join(", "));
+  return out;
+}
+
 // ---------- Фильтры и список ----------
 $("fType").innerHTML += TYPES.map((t) => `<option>${t}</option>`).join("");
 $("type").innerHTML = TYPES.map((t) => `<option>${t}</option>`).join("");
@@ -347,16 +387,17 @@ function cardHtml(i) {
   return `
   <article class="card ${i.hasDefect || broken ? "has-defect" : ""}">
     <div class="card-head">
-      <span class="inv">${esc(i.inv)}</span>
+      <span class="inv" data-act="open" data-id="${i.id}">${esc(i.inv)}</span>
       <span class="badge ${badgeClass}">${esc(i.status)}</span>
     </div>
-    <div>
+    <div data-act="open" data-id="${i.id}">
       <p class="title">${esc(i.type)} ${esc(i.brand)}</p>
       <p class="sub">${esc(normPurpose(i.purpose))}${busy && i.owner ? " · владелец: " + esc(i.owner) : ""}</p>
     </div>
     ${i.hasDefect ? `<div class="defect">Дефект: ${esc(i.defect || "не описан")}</div>` : ""}
     ${kit ? `<div><p class="kit-title">Комплект (нажмите, если чего-то нет)</p><div class="chips">${kit}</div></div>` : ""}
     <div class="card-actions">
+      <button class="btn small" data-act="open" data-id="${i.id}">Подробнее</button>
       <button class="btn small" data-act="edit" data-id="${i.id}">Изменить</button>
       <button class="btn small danger" data-act="del" data-id="${i.id}">Удалить</button>
     </div>
@@ -370,6 +411,7 @@ $("list").addEventListener("click", async (e) => {
   if (!item) return;
   const act = btn.dataset.act;
   try {
+    if (act === "open") openDetail(item.id);
     if (act === "edit") openDialog(item);
     if (act === "del") await deleteItem(item);
     if (act === "kit") await toggleKit(item, +btn.dataset.idx);
@@ -379,9 +421,10 @@ $("list").addEventListener("click", async (e) => {
 });
 
 async function deleteItem(item) {
-  if (!confirm(`Удалить ${item.inv}?`)) return;
+  if (!confirm(`Удалить ${item.inv}? Запись в журнале останется.`)) return;
   const batch = writeBatch(db);
   batch.delete(doc(db, "items", item.id));
+  logTo(batch, item.id, item.inv, "Удалено из базы");
   await batch.commit();
 }
 
@@ -390,8 +433,81 @@ async function toggleKit(item, idx) {
   const k = kit[idx];
   const batch = writeBatch(db);
   batch.update(doc(db, "items", item.id), { kit });
+  logTo(batch, item.id, item.inv, k.ok ? `Комплект: «${k.name}» на месте` : `Комплект: «${k.name}» отсутствует`);
   await batch.commit();
 }
+
+// ---------- Карточка устройства ----------
+function detailHtml(i) {
+  const busy = i.status === "Занят";
+  const badgeClass = i.status === "Сломан" ? "broken" : busy ? "busy" : "free";
+  const kit = (i.kit || []).map((k) => `<span class="chip ${k.ok ? "" : "missing"}">${esc(k.name)}</span>`).join("");
+  return `
+    <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="card-head" style="justify-content:flex-start;gap:12px">
+          <span class="inv">${esc(i.inv)}</span>
+          <span class="badge ${badgeClass}">${esc(i.status)}</span>
+        </div>
+        <div>
+          <p class="title">${esc(i.type)} ${esc(i.brand)}</p>
+          <p class="sub">${esc(normPurpose(i.purpose))}${busy && i.owner ? " · владелец: " + esc(i.owner) : ""}</p>
+        </div>
+    </div>
+    ${i.hasDefect ? `<div class="defect">Дефект: ${esc(i.defect || "не описан")}</div>` : ""}
+    ${kit ? `<div><p class="kit-title">Комплект</p><div class="chips">${kit}</div></div>` : ""}
+    <div>
+      <h3>История</h3>
+      <div id="detailHistory" class="history">${historyHtml(detailHistory)}</div>
+    </div>
+    <div class="actions">
+      <button class="btn" data-dact="edit">Изменить</button>
+      <button class="btn primary" data-dact="close">Закрыть</button>
+    </div>`;
+}
+
+function refreshDetail() {
+  const item = items.find((i) => i.id === detailId);
+  if (!item) { $("detailDlg").close(); return; }
+  $("detailBody").innerHTML = detailHtml(item);
+}
+
+function openDetail(id) {
+  detailId = id;
+  detailHistory = [];
+  if (unsubDetail) unsubDetail();
+  unsubDetail = onSnapshot(query(historyCol, where("itemId", "==", id)), (snap) => {
+    detailHistory = snap.docs.map((d) => ({ ...d.data(), hideInv: true })).sort((a, b) => tsMs(b.at) - tsMs(a.at));
+    const el = $("detailHistory");
+    if (el) el.innerHTML = historyHtml(detailHistory);
+  });
+  refreshDetail();
+  if (!$("detailDlg").open) $("detailDlg").showModal();
+}
+
+$("detailDlg").addEventListener("close", () => {
+  if (unsubDetail) unsubDetail();
+  unsubDetail = null; detailId = null;
+});
+
+$("detailBody").addEventListener("click", (e) => {
+  const act = e.target.closest("[data-dact]")?.dataset.dact;
+  const item = items.find((i) => i.id === detailId);
+  if (!act || !item) return;
+  if (act === "close") $("detailDlg").close();
+  if (act === "edit") { $("detailDlg").close(); openDialog(item); }
+});
+
+// ---------- Журнал ----------
+$("journalBtn").addEventListener("click", () => {
+  $("journalList").innerHTML = `<p class="muted">Загрузка…</p>`;
+  if (unsubJournal) unsubJournal();
+  unsubJournal = onSnapshot(query(historyCol, orderBy("at", "desc"), limit(100)), (snap) => {
+    $("journalList").innerHTML = historyHtml(snap.docs.map((d) => d.data()));
+  }, (err) => { $("journalList").textContent = "Ошибка: " + err.message; });
+  $("journalDlg").showModal();
+});
+$("journalDlg").addEventListener("close", () => { if (unsubJournal) unsubJournal(); unsubJournal = null; });
+
 
 // ---------- Форма ----------
 const dlg = $("dlg");
@@ -454,11 +570,16 @@ $("form").addEventListener("submit", async (e) => {
 
     const batch = writeBatch(db);
     const ref = old ? doc(db, "items", old.id) : doc(itemsCol);
+    const id = ref.id;
+    const extra = [];
 
     if (old) {
+      [...diffs(old, data), ...extra].forEach((t) => logTo(batch, id, data.inv, t));
       batch.update(ref, data);
     } else {
       batch.set(ref, { ...data, createdAt: serverTimestamp() });
+      logTo(batch, id, data.inv, "Добавлено в базу");
+      extra.forEach((t) => logTo(batch, id, data.inv, t));
     }
     await batch.commit();
     dlg.close();

@@ -87,6 +87,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-vi
   padding: 3px 12px; border-radius: 4px; letter-spacing: 0.02em;
   box-shadow: inset 0 0 0 2px rgba(0,0,0,.12);
 }
+[data-act="open"] { cursor: pointer; }
 .badge { font-size: 0.8rem; font-weight: 600; padding: 3px 10px; border-radius: 99px; }
 .badge.free { background: var(--ok-bg); color: var(--ok); }
 .badge.busy { background: var(--busy-bg); color: var(--busy); }
@@ -120,6 +121,11 @@ legend { padding: 0 6px; color: var(--muted); font-size: 0.9rem; }
 .kit-options { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 @media (max-width: 520px) { .grid { grid-template-columns: 1fr; } }
+
+/* ---------- Карточка устройства ---------- */
+.history { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow: auto; }
+.h-row { border-left: 3px solid var(--tag); padding: 2px 10px; font-size: 0.9rem; }
+.h-row small { display: block; color: var(--muted); }
 
 #pwdForm label, .add-user label { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; color: var(--muted); }
 .users { display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow: auto; }

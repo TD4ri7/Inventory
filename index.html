@@ -51,6 +51,7 @@
       <div class="top-inner">
         <h1>Инвентаризация школы</h1>
         <div class="top-actions">
+          <button id="journalBtn" class="btn">Журнал</button>
           <button id="addBtn" class="btn primary">Добавить технику</button>
         </div>
       </div>
@@ -173,6 +174,21 @@
         <button type="submit" id="pwdSave" class="btn primary">Сохранить</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Карточка устройства -->
+  <dialog id="detailDlg" class="wide">
+    <div id="detailBody" class="pad"></div>
+  </dialog>
+
+  <!-- Общий журнал -->
+  <dialog id="journalDlg" class="wide">
+    <div class="pad">
+      <h2>Журнал изменений</h2>
+      <p class="muted">Последние 100 записей по всей технике</p>
+      <div id="journalList" class="history"></div>
+      <div class="actions"><button class="btn" data-close="journalDlg">Закрыть</button></div>
+    </div>
   </dialog>
 
 
