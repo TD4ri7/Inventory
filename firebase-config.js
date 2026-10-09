@@ -1,5 +1,4 @@
-// Сюда вставьте настройки вашего Firebase-проекта:
-// Firebase Consle → Project settings → General → Your apps → Web app → SDK setup and configuration
+
 export const firebaseConfig = {
   apiKey: "AIzaSyDZIv2dcsxPEKaLsuF7bZ7ECNeSb5nro9o",
   authDomain: "inventory-cb566.firebaseapp.com",
