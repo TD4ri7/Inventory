@@ -14,7 +14,7 @@ import {
 import { firebaseConfig } from "./firebase-config.js";
 
 const TYPES = ["Ноутбук", "Стационарный ПК", "Монитор", "Проектор", "Принтер", "Другое"];
-const KIT = ["Гарнитура", "Мышь", "Клавиатура", "Зарядка", "Сумка"];
+const KIT = ["Гарнитура", "Мышь", "Клавиатура", "Зарядка", "Сумка", "Полный заряд аккамулятора"];
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
