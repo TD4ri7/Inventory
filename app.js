@@ -111,6 +111,15 @@ function authMsg(ex) {
   return map[ex.code] || "Ошибка: " + (ex.code || ex.message);
 }
 
+const isAdmin = () => profile?.role === "admin";
+const pick = (o, keys) => Object.fromEntries(keys.map((k) => [k, o[k]]));
+
+// Обычный сотрудник не видит кнопки администратора
+function applyRole() {
+  const a = isAdmin();
+  ["addBtn", "labelsBtn", "journalBtn"].forEach((id) => { $(id).hidden = !a; });
+}
+
 async function handleUser(u) {
   if (!u) {
     user = null; profile = null;
@@ -135,6 +144,7 @@ async function handleUser(u) {
   user = u; profile = prof;
   $("userEmail").textContent = `${u.email} · ${prof.role === "admin" ? "администратор" : "сотрудник"}`;
   $("usersBtn").hidden = prof.role !== "admin";
+  applyRole();
   $("loginView").hidden = true;
   $("appView").hidden = false;
   listenItems();
@@ -415,7 +425,7 @@ function render() {
     <span class="warn"><b>${cnt("Сломан")}</b>сломано</span>
     <span class="warn"><b>${items.filter((i) => i.hasDefect).length}</b>с дефектами</span>`;
 
-  $("auditBtn").hidden = !!audit;
+  $("auditBtn").hidden = !!audit || !isAdmin();
   $("auditBar").hidden = !audit;
   if (audit) {
     const scope = items.filter((i) => audit.ids.has(i.id));
@@ -462,8 +472,8 @@ function cardHtml(i) {
       </div>` : ""}
     <div class="card-actions">
       <button class="btn small" data-act="open" data-id="${i.id}">Подробнее</button>
-      <button class="btn small" data-act="edit" data-id="${i.id}">Изменить</button>
-      <button class="btn small danger" data-act="del" data-id="${i.id}">Удалить</button>
+      <button class="btn small" data-act="edit" data-id="${i.id}">${isAdmin() ? "Изменить" : "Комплект и дефект"}</button>
+      ${isAdmin() ? `<button class="btn small danger" data-act="del" data-id="${i.id}">Удалить</button>` : ""}
     </div>
   </article>`;
 }
@@ -531,7 +541,7 @@ $("auditFinish").addEventListener("click", () => {
   const left = scope.filter((i) => !isChecked(i));
   const lines = (arr) => (arr.length ? arr.map((i) => "  • " + label(i)).join("\n") : "  —");
   $("reportText").textContent =
-`Инвентаризация от ${fmt(audit.start)}
+    `Инвентаризация от ${fmt(audit.start)}
 Проверял: ${user.email}
 
 Всего: ${scope.length} · На месте: ${ok.length} · Не найдено: ${missing.length} · Не проверено: ${left.length}
@@ -587,13 +597,10 @@ function detailHtml(i) {
     ${i.hasDefect ? `<div class="defect">Дефект: ${esc(i.defect || "не описан")}</div>` : ""}
     ${i.hasPhoto ? `<img id="detailPhoto" class="photo" alt="Фото дефекта" hidden>` : ""}
     ${kit ? `<div><p class="kit-title">Комплект</p><div class="chips">${kit}</div></div>` : ""}
-    <div>
-      <h3>История</h3>
-      <div id="detailHistory" class="history">${historyHtml(detailHistory)}</div>
-    </div>
+    ${isAdmin() ? `<div><h3>История</h3><div id="detailHistory" class="history">${historyHtml(detailHistory)}</div></div>` : ""}
     <div class="actions">
-      <button class="btn" data-dact="print">Печать наклейки</button>
-      <button class="btn" data-dact="edit">Изменить</button>
+      ${isAdmin() ? `<button class="btn" data-dact="print">Печать наклейки</button>` : ""}
+      <button class="btn" data-dact="edit">${isAdmin() ? "Изменить" : "Комплект и дефект"}</button>
       <button class="btn primary" data-dact="close">Закрыть</button>
     </div>`;
 }
@@ -606,7 +613,7 @@ function refreshDetail() {
     getPhoto(item).then((src) => {
       const img = $("detailPhoto");
       if (src && img && detailId === item.id) { img.src = src; img.hidden = false; }
-    }).catch(() => {});
+    }).catch(() => { });
   }
 }
 
@@ -614,7 +621,7 @@ function openDetail(id) {
   detailId = id;
   detailHistory = [];
   if (unsubDetail) unsubDetail();
-  unsubDetail = onSnapshot(query(historyCol, where("itemId", "==", id)), (snap) => {
+  if (isAdmin()) unsubDetail = onSnapshot(query(historyCol, where("itemId", "==", id)), (snap) => {
     detailHistory = snap.docs.map((d) => ({ ...d.data(), hideInv: true })).sort((a, b) => tsMs(b.at) - tsMs(a.at));
     const el = $("detailHistory");
     if (el) el.innerHTML = historyHtml(detailHistory);
@@ -661,6 +668,14 @@ function syncForm() {
   $("photoInput").disabled = !d;
   $("photoLabel").classList.toggle("disabled", !d);
   if (!d) setPreview(null);
+  if (isAdmin()) {
+    ["type", "inv", "purpose", "brand", "status"].forEach((id) => ($(id).disabled = false));
+    $("hasDefect").disabled = false;
+  } else {
+    // сотрудник не меняет основные поля и не может снять отметку о дефекте
+    ["type", "inv", "purpose", "brand", "status", "owner"].forEach((id) => ($(id).disabled = true));
+    $("hasDefect").disabled = !!items.find((i) => i.id === editingId)?.hasDefect;
+  }
 }
 $("status").addEventListener("change", syncForm);
 $("hasDefect").addEventListener("change", () => {
@@ -671,7 +686,7 @@ $("hasDefect").addEventListener("change", () => {
 function setPreview(src) {
   $("photoPreview").hidden = !src;
   if (src) $("photoPreview").src = src;
-  $("photoRemove").hidden = !src;
+  $("photoRemove").hidden = !src || !isAdmin();
 }
 
 function compressImage(file, max = 800, quality = 0.68) {
@@ -706,7 +721,7 @@ $("photoRemove").addEventListener("click", () => { pendingPhoto = null; setPrevi
 function openDialog(item) {
   editingId = item?.id ?? null;
   pendingPhoto = undefined;
-  $("dlgTitle").textContent = item ? "Изменить технику" : "Новая техника";
+  $("dlgTitle").textContent = item ? (isAdmin() ? "Изменить технику" : "Комплект и дефект") : "Новая техника";
   $("type").value = item?.type ?? TYPES[0];
   $("inv").value = item?.inv ?? "";
   $("purpose").value = normPurpose(item?.purpose);
@@ -718,11 +733,15 @@ function openDialog(item) {
   setPreview(null);
 
   const names = (item?.kit || []).map((k) => k.name);
-  document.querySelectorAll("#kitOptions input").forEach((c) => (c.checked = names.includes(c.value)));
-  $("kitCustom").value = names.filter((n) => !KIT.includes(n)).join(", ");
+  document.querySelectorAll("#kitOptions input").forEach((c) => {
+    c.checked = names.includes(c.value);
+    c.disabled = !isAdmin() && c.checked;   // сотрудник только добавляет, не убирает
+  });
+  $("kitCustom").value = isAdmin() ? names.filter((n) => !KIT.includes(n)).join(", ") : "";
+  $("kitCustom").placeholder = isAdmin() ? "Другое (через запятую)" : "Добавить своё (через запятую)";
   syncForm();
   dlg.showModal();
-  if (item?.hasPhoto) getPhoto(item).then((src) => { if (pendingPhoto === undefined) setPreview(src); }).catch(() => {});
+  if (item?.hasPhoto) getPhoto(item).then((src) => { if (pendingPhoto === undefined) setPreview(src); }).catch(() => { });
 }
 
 $("addBtn").addEventListener("click", () => openDialog(null));
@@ -738,6 +757,10 @@ $("form").addEventListener("submit", async (e) => {
       ...[...document.querySelectorAll("#kitOptions input:checked")].map((c) => c.value),
       ...$("kitCustom").value.split(",").map((s) => s.trim()).filter(Boolean)
     ];
+    if (!isAdmin()) {
+      if (!old) throw new Error("Нет прав на добавление техники");
+      names.unshift(...(old.kit || []).map((k) => k.name));   // прежний комплект сохраняется
+    }
     const data = {
       type: $("type").value,
       inv: $("inv").value.trim(),
@@ -768,7 +791,7 @@ $("form").addEventListener("submit", async (e) => {
 
     if (old) {
       [...diffs(old, data), ...extra].forEach((t) => logTo(batch, id, data.inv, t));
-      batch.update(ref, data);
+      batch.update(ref, isAdmin() ? data : pick(data, ["kit", "hasDefect", "defect", "hasPhoto", "photoAt"]));
     } else {
       batch.set(ref, { ...data, createdAt: serverTimestamp() });
       logTo(batch, id, data.inv, "Добавлено в базу");
