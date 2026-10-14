@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="ru">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,7 +10,6 @@
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 </head>
-
 <body>
   <div id="banner" class="banner" hidden></div>
 
@@ -65,8 +63,7 @@
         <div class="user"><span id="userEmail"></span>
           <button id="pwdBtn" class="link-btn">Пароль</button>
           <button id="usersBtn" class="link-btn" hidden>Пользователи</button>
-          <button id="logoutBtn" class="link-btn">Выйти</button>
-        </div>
+          <button id="logoutBtn" class="link-btn">Выйти</button></div>
       </div>
     </header>
 
@@ -91,12 +88,14 @@
         <select id="fType">
           <option value="">Любой тип</option>
         </select>
+        <select id="fCabinet">
+          <option value="">Любой кабинет</option>
+        </select>
         <label class="check"><input type="checkbox" id="fDefect"> Только с дефектами</label>
       </section>
 
       <section id="list" class="list"></section>
-      <p id="empty" class="empty" hidden>Пока ничего нет. Нажмите «Добавить технику», чтобы внести первое устройство.
-      </p>
+      <p id="empty" class="empty" hidden>Пока ничего нет. Нажмите «Добавить технику», чтобы внести первое устройство.</p>
     </main>
   </div>
 
@@ -134,6 +133,18 @@
       </div>
 
       <fieldset>
+        <legend>Где находится</legend>
+        <div class="grid">
+          <label>Кабинет
+            <input id="cabinet" placeholder="306">
+          </label>
+          <label>Адрес / место
+            <input id="address" placeholder="Улица, этаж, склад">
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset>
         <legend>Дефект</legend>
         <label class="check"><input type="checkbox" id="hasDefect"> Есть дефект</label>
         <textarea id="defect" rows="2" placeholder="Что сломано или повреждено"></textarea>
@@ -163,15 +174,13 @@
   <dialog id="usersDlg" class="wide">
     <div class="pad">
       <h2>Пользователи</h2>
-      <p class="muted">Здесь вы создаёте аккаунты сотрудников. Они входят на сайте по этой почте и паролю. Пароль можно
-        показать им сразу после создания.</p>
+      <p class="muted">Здесь вы создаёте аккаунты сотрудников. Они входят на сайте по этой почте и паролю. Пароль можно показать им сразу после создания.</p>
       <div id="usersList" class="users"></div>
       <form id="usersForm" class="add-user">
         <h3>Добавить пользователя</h3>
         <div class="grid">
           <label>Почта <input id="addEmail" type="email" required autocomplete="off"></label>
-          <label>Пароль (от 6 символов) <input id="addPass" type="text" required minlength="6"
-              autocomplete="off"></label>
+          <label>Пароль (от 6 символов) <input id="addPass" type="text" required minlength="6" autocomplete="off"></label>
           <label>Роль
             <select id="addRole">
               <option value="staff">Сотрудник</option>
@@ -191,8 +200,7 @@
     <form id="pwdForm">
       <h2>Смена пароля</h2>
       <label>Текущий пароль <input id="curPass" type="password" required autocomplete="current-password"></label>
-      <label>Новый пароль <input id="newPass" type="password" required minlength="6"
-          autocomplete="new-password"></label>
+      <label>Новый пароль <input id="newPass" type="password" required minlength="6" autocomplete="new-password"></label>
       <label>Повторите новый пароль <input id="newPass2" type="password" required autocomplete="new-password"></label>
       <p id="pwdError" class="login-error" hidden></p>
       <div class="actions">
@@ -233,5 +241,4 @@
 
   <script type="module" src="app.js"></script>
 </body>
-
 </html>

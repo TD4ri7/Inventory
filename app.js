@@ -361,6 +361,8 @@ function diffs(o, n) {
   const newNames = n.kit.map((k) => k.name);
   newNames.filter((x) => !(x in oldKit)).forEach((x) => out.push(`В комплект добавлено: ${x}`));
   Object.keys(oldKit).filter((x) => !newNames.includes(x)).forEach((x) => out.push(`Из комплекта убрано: ${x}`));
+  if ((o.cabinet || "") !== n.cabinet) out.push(`Кабинет: ${o.cabinet || "—"} → ${n.cabinet || "—"}`);
+  if ((o.address || "") !== n.address) out.push(`Адрес: ${o.address || "—"} → ${n.address || "—"}`);
   const meta = [];
   if (o.type !== n.type) meta.push(`тип ${o.type} → ${n.type}`);
   if (o.inv !== n.inv) meta.push(`номер ${o.inv} → ${n.inv}`);
@@ -385,7 +387,7 @@ function printLabels(list) {
   $("printArea").innerHTML = list.map((i) => `
     <div class="label">
       <div class="label-qr">${qrSvg(itemUrl(i.id))}</div>
-      <div class="label-text"><b>${esc(i.inv)}</b><span>${esc(i.type)} ${esc(i.brand)}</span></div>
+      <div class="label-text"><b>${esc(i.inv)}</b><span>${esc(i.type)} ${esc(i.brand)}</span>${i.cabinet ? `<span>Каб. ${esc(i.cabinet)}</span>` : ""}</div>
     </div>`).join("");
   window.print();
 }
@@ -409,13 +411,30 @@ function filtered() {
   return items.filter((i) => {
     if ($("fStatus").value && i.status !== $("fStatus").value) return false;
     if ($("fType").value && i.type !== $("fType").value) return false;
+    if ($("fCabinet").value && i.cabinet !== $("fCabinet").value) return false;
     if ($("fDefect").checked && !i.hasDefect) return false;
-    if (q && ![i.inv, i.brand, i.owner, i.type].join(" ").toLowerCase().includes(q)) return false;
+    if (q && ![i.inv, i.brand, i.owner, i.type, i.cabinet, i.address,
+      ].join(" ").toLowerCase().includes(q)) return false;
     if (audit && $("onlyUnchecked").checked && audit.ids.has(i.id) && isChecked(i)) return false;
     return true;
   });
 }
 
+function placeLine(i) {
+  const parts = [];
+  if (i.cabinet) parts.push(`Кабинет ${esc(i.cabinet)}`);
+  if (i.address) parts.push(esc(i.address));
+  return parts.length ? `<p class="sub">${parts.join(" · ")}</p>` : "";
+}
+
+function updateCabinetFilter() {
+  const sel = $("fCabinet"), cur = sel.value;
+  const list = [...new Set(items.map((i) => i.cabinet).filter(Boolean))]
+    .sort((x, y) => x.localeCompare(y, "ru", { numeric: true }));
+  sel.innerHTML = `<option value="">Любой кабинет</option>` + list.map((c) => `<option>${esc(c)}</option>`).join("");
+  sel.value = list.includes(cur) ? cur : "";
+}
+$("fCabinet").addEventListener("input", render);
 function render() {
   const cnt = (s) => items.filter((i) => i.status === s).length;
   $("stats").innerHTML = `
@@ -432,6 +451,7 @@ function render() {
     $("auditProgress").textContent = `проверено ${scope.filter(isChecked).length} из ${scope.length}`;
   }
 
+  updateCabinetFilter();
   $("empty").hidden = items.length > 0;
   $("list").innerHTML = filtered().map(cardHtml).join("");
 }
@@ -461,6 +481,7 @@ function cardHtml(i) {
     <div data-act="open" data-id="${i.id}">
       <p class="title">${esc(i.type)} ${esc(i.brand)}</p>
       <p class="sub">${esc(normPurpose(i.purpose))}${busy && i.owner ? " · владелец: " + esc(i.owner) : ""}</p>
+      ${placeLine(i)}
       ${lastCheckText(i)}
     </div>
     ${i.hasDefect ? `<div class="defect">Дефект: ${esc(i.defect || "не описан")}${i.hasPhoto ? " · есть фото" : ""}</div>` : ""}
@@ -541,7 +562,7 @@ $("auditFinish").addEventListener("click", () => {
   const left = scope.filter((i) => !isChecked(i));
   const lines = (arr) => (arr.length ? arr.map((i) => "  • " + label(i)).join("\n") : "  —");
   $("reportText").textContent =
-    `Инвентаризация от ${fmt(audit.start)}
+`Инвентаризация от ${fmt(audit.start)}
 Проверял: ${user.email}
 
 Всего: ${scope.length} · На месте: ${ok.length} · Не найдено: ${missing.length} · Не проверено: ${left.length}
@@ -586,6 +607,7 @@ function detailHtml(i) {
         <div>
           <p class="title">${esc(i.type)} ${esc(i.brand)}</p>
           <p class="sub">${esc(normPurpose(i.purpose))}${busy && i.owner ? " · владелец: " + esc(i.owner) : ""}</p>
+          ${placeLine(i)}
           ${lastCheckText(i)}
         </div>
       </div>
@@ -613,7 +635,7 @@ function refreshDetail() {
     getPhoto(item).then((src) => {
       const img = $("detailPhoto");
       if (src && img && detailId === item.id) { img.src = src; img.hidden = false; }
-    }).catch(() => { });
+    }).catch(() => {});
   }
 }
 
@@ -671,9 +693,11 @@ function syncForm() {
   if (isAdmin()) {
     ["type", "inv", "purpose", "brand", "status"].forEach((id) => ($(id).disabled = false));
     $("hasDefect").disabled = false;
+    ["address", "cabinet"].forEach((id) => ($(id).disabled = false));
   } else {
     // сотрудник не меняет основные поля и не может снять отметку о дефекте
     ["type", "inv", "purpose", "brand", "status", "owner"].forEach((id) => ($(id).disabled = true));
+    ["address", "cabinet"].forEach((id) => ($(id).disabled = true));
     $("hasDefect").disabled = !!items.find((i) => i.id === editingId)?.hasDefect;
   }
 }
@@ -726,6 +750,8 @@ function openDialog(item) {
   $("inv").value = item?.inv ?? "";
   $("purpose").value = normPurpose(item?.purpose);
   $("brand").value = item?.brand ?? "";
+  $("address").value = item?.address ?? "";
+  $("cabinet").value = item?.cabinet ?? "";
   $("status").value = item?.status ?? "Свободен";
   $("owner").value = item?.owner ?? "";
   $("hasDefect").checked = !!item?.hasDefect;
@@ -741,7 +767,7 @@ function openDialog(item) {
   $("kitCustom").placeholder = isAdmin() ? "Другое (через запятую)" : "Добавить своё (через запятую)";
   syncForm();
   dlg.showModal();
-  if (item?.hasPhoto) getPhoto(item).then((src) => { if (pendingPhoto === undefined) setPreview(src); }).catch(() => { });
+  if (item?.hasPhoto) getPhoto(item).then((src) => { if (pendingPhoto === undefined) setPreview(src); }).catch(() => {});
 }
 
 $("addBtn").addEventListener("click", () => openDialog(null));
@@ -766,6 +792,8 @@ $("form").addEventListener("submit", async (e) => {
       inv: $("inv").value.trim(),
       purpose: $("purpose").value,
       brand: $("brand").value.trim(),
+      address: $("address").value.trim(),
+      cabinet: $("cabinet").value.trim(),
       status: $("status").value,
       owner: $("owner").value.trim(),
       hasDefect: $("hasDefect").checked,
