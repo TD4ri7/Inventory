@@ -145,6 +145,18 @@
       </fieldset>
 
       <fieldset>
+        <legend>Цена и гарантия</legend>
+        <div class="grid">
+          <label>Цена
+            <input id="price" type="number" min="0" step="0.01" placeholder="0">
+          </label>
+          <label>Гарантия до
+            <input id="warranty" type="date">
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset>
         <legend>Дефект</legend>
         <label class="check"><input type="checkbox" id="hasDefect"> Есть дефект</label>
         <textarea id="defect" rows="2" placeholder="Что сломано или повреждено"></textarea>

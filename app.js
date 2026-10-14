@@ -363,6 +363,8 @@ function diffs(o, n) {
   Object.keys(oldKit).filter((x) => !newNames.includes(x)).forEach((x) => out.push(`Из комплекта убрано: ${x}`));
   if ((o.cabinet || "") !== n.cabinet) out.push(`Кабинет: ${o.cabinet || "—"} → ${n.cabinet || "—"}`);
   if ((o.address || "") !== n.address) out.push(`Адрес: ${o.address || "—"} → ${n.address || "—"}`);
+  if ((o.price ?? null) !== n.price) out.push(`Цена: ${o.price ?? "—"} → ${n.price ?? "—"}`);
+  if ((o.warranty || "") !== n.warranty) out.push(`Гарантия до: ${o.warranty || "—"} → ${n.warranty || "—"}`);
   const meta = [];
   if (o.type !== n.type) meta.push(`тип ${o.type} → ${n.type}`);
   if (o.inv !== n.inv) meta.push(`номер ${o.inv} → ${n.inv}`);
@@ -435,6 +437,24 @@ function updateCabinetFilter() {
   sel.value = list.includes(cur) ? cur : "";
 }
 $("fCabinet").addEventListener("input", render);
+const CURRENCY = "€";   // поменяйте знак, если нужна другая валюта
+
+function warrantyBadge(i) {
+  if (!i.warranty) return "";
+  const end = new Date(i.warranty + "T00:00:00");
+  const days = Math.ceil((end - new Date()) / 86400000);
+  const date = end.toLocaleDateString("ru-RU");
+  const [cls, text] = days < 0 ? ["broken", `Гарантия истекла ${date}`]
+    : days <= 60 ? ["busy", `Гарантия до ${date} (осталось ${days} дн.)`]
+    : ["free", `Гарантия до ${date}`];
+  return `<p class="sub"><span class="badge ${cls}">${text}</span></p>`;
+}
+
+function moneyLine(i) {
+  const price = i.price != null && i.price !== ""
+    ? `<p class="sub">Цена ${esc(i.price)} ${CURRENCY}</p>` : "";
+  return price + warrantyBadge(i);
+}
 function render() {
   const cnt = (s) => items.filter((i) => i.status === s).length;
   $("stats").innerHTML = `
@@ -482,6 +502,7 @@ function cardHtml(i) {
       <p class="title">${esc(i.type)} ${esc(i.brand)}</p>
       <p class="sub">${esc(normPurpose(i.purpose))}${busy && i.owner ? " · владелец: " + esc(i.owner) : ""}</p>
       ${placeLine(i)}
+      ${moneyLine(i)}
       ${lastCheckText(i)}
     </div>
     ${i.hasDefect ? `<div class="defect">Дефект: ${esc(i.defect || "не описан")}${i.hasPhoto ? " · есть фото" : ""}</div>` : ""}
@@ -608,6 +629,7 @@ function detailHtml(i) {
           <p class="title">${esc(i.type)} ${esc(i.brand)}</p>
           <p class="sub">${esc(normPurpose(i.purpose))}${busy && i.owner ? " · владелец: " + esc(i.owner) : ""}</p>
           ${placeLine(i)}
+          ${moneyLine(i)}
           ${lastCheckText(i)}
         </div>
       </div>
@@ -694,10 +716,12 @@ function syncForm() {
     ["type", "inv", "purpose", "brand", "status"].forEach((id) => ($(id).disabled = false));
     $("hasDefect").disabled = false;
     ["address", "cabinet"].forEach((id) => ($(id).disabled = false));
+    ["price", "warranty"].forEach((id) => ($(id).disabled = false));
   } else {
     // сотрудник не меняет основные поля и не может снять отметку о дефекте
     ["type", "inv", "purpose", "brand", "status", "owner"].forEach((id) => ($(id).disabled = true));
     ["address", "cabinet"].forEach((id) => ($(id).disabled = true));
+    ["price", "warranty"].forEach((id) => ($(id).disabled = true));
     $("hasDefect").disabled = !!items.find((i) => i.id === editingId)?.hasDefect;
   }
 }
@@ -752,6 +776,8 @@ function openDialog(item) {
   $("brand").value = item?.brand ?? "";
   $("address").value = item?.address ?? "";
   $("cabinet").value = item?.cabinet ?? "";
+  $("price").value = item?.price ?? "";
+  $("warranty").value = item?.warranty ?? "";
   $("status").value = item?.status ?? "Свободен";
   $("owner").value = item?.owner ?? "";
   $("hasDefect").checked = !!item?.hasDefect;
@@ -794,6 +820,8 @@ $("form").addEventListener("submit", async (e) => {
       brand: $("brand").value.trim(),
       address: $("address").value.trim(),
       cabinet: $("cabinet").value.trim(),
+      price: $("price").value === "" ? null : Number($("price").value),
+      warranty: $("warranty").value,
       status: $("status").value,
       owner: $("owner").value.trim(),
       hasDefect: $("hasDefect").checked,
