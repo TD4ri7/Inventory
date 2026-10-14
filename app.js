@@ -365,6 +365,8 @@ function diffs(o, n) {
   if ((o.address || "") !== n.address) out.push(`Адрес: ${o.address || "—"} → ${n.address || "—"}`);
   if ((o.price ?? null) !== n.price) out.push(`Цена: ${o.price ?? "—"} → ${n.price ?? "—"}`);
   if ((o.warranty || "") !== n.warranty) out.push(`Гарантия до: ${o.warranty || "—"} → ${n.warranty || "—"}`);
+  if ((o.code || "") !== n.code) out.push(`Код: ${o.code || "—"} → ${n.code || "—"}`);
+  if ((o.serial || "") !== n.serial) out.push(`Серийный номер: ${o.serial || "—"} → ${n.serial || "—"}`);
   const meta = [];
   if (o.type !== n.type) meta.push(`тип ${o.type} → ${n.type}`);
   if (o.inv !== n.inv) meta.push(`номер ${o.inv} → ${n.inv}`);
@@ -416,6 +418,7 @@ function filtered() {
     if ($("fCabinet").value && i.cabinet !== $("fCabinet").value) return false;
     if ($("fDefect").checked && !i.hasDefect) return false;
     if (q && ![i.inv, i.brand, i.owner, i.type, i.cabinet, i.address,
+        i.code, i.serial,
       ].join(" ").toLowerCase().includes(q)) return false;
     if (audit && $("onlyUnchecked").checked && audit.ids.has(i.id) && isChecked(i)) return false;
     return true;
@@ -454,6 +457,12 @@ function moneyLine(i) {
   const price = i.price != null && i.price !== ""
     ? `<p class="sub">Цена ${esc(i.price)} ${CURRENCY}</p>` : "";
   return price + warrantyBadge(i);
+}
+function codesLine(i) {
+  const parts = [];
+  if (i.code) parts.push(`Код ${esc(i.code)}`);
+  if (i.serial) parts.push(`С/Н ${esc(i.serial)}`);
+  return parts.length ? `<p class="sub">${parts.join(" · ")}</p>` : "";
 }
 function render() {
   const cnt = (s) => items.filter((i) => i.status === s).length;
@@ -503,6 +512,7 @@ function cardHtml(i) {
       <p class="sub">${esc(normPurpose(i.purpose))}${busy && i.owner ? " · владелец: " + esc(i.owner) : ""}</p>
       ${placeLine(i)}
       ${moneyLine(i)}
+      ${codesLine(i)}
       ${lastCheckText(i)}
     </div>
     ${i.hasDefect ? `<div class="defect">Дефект: ${esc(i.defect || "не описан")}${i.hasPhoto ? " · есть фото" : ""}</div>` : ""}
@@ -630,6 +640,7 @@ function detailHtml(i) {
           <p class="sub">${esc(normPurpose(i.purpose))}${busy && i.owner ? " · владелец: " + esc(i.owner) : ""}</p>
           ${placeLine(i)}
           ${moneyLine(i)}
+          ${codesLine(i)}
           ${lastCheckText(i)}
         </div>
       </div>
@@ -717,11 +728,13 @@ function syncForm() {
     $("hasDefect").disabled = false;
     ["address", "cabinet"].forEach((id) => ($(id).disabled = false));
     ["price", "warranty"].forEach((id) => ($(id).disabled = false));
+    ["code", "serial"].forEach((id) => ($(id).disabled = false));
   } else {
     // сотрудник не меняет основные поля и не может снять отметку о дефекте
     ["type", "inv", "purpose", "brand", "status", "owner"].forEach((id) => ($(id).disabled = true));
     ["address", "cabinet"].forEach((id) => ($(id).disabled = true));
     ["price", "warranty"].forEach((id) => ($(id).disabled = true));
+    ["code", "serial"].forEach((id) => ($(id).disabled = true));
     $("hasDefect").disabled = !!items.find((i) => i.id === editingId)?.hasDefect;
   }
 }
@@ -778,6 +791,8 @@ function openDialog(item) {
   $("cabinet").value = item?.cabinet ?? "";
   $("price").value = item?.price ?? "";
   $("warranty").value = item?.warranty ?? "";
+  $("code").value = item?.code ?? "";
+  $("serial").value = item?.serial ?? "";
   $("status").value = item?.status ?? "Свободен";
   $("owner").value = item?.owner ?? "";
   $("hasDefect").checked = !!item?.hasDefect;
@@ -822,6 +837,8 @@ $("form").addEventListener("submit", async (e) => {
       cabinet: $("cabinet").value.trim(),
       price: $("price").value === "" ? null : Number($("price").value),
       warranty: $("warranty").value,
+      code: $("code").value.trim(),
+      serial: $("serial").value.trim(),
       status: $("status").value,
       owner: $("owner").value.trim(),
       hasDefect: $("hasDefect").checked,
@@ -829,6 +846,8 @@ $("form").addEventListener("submit", async (e) => {
       kit: [...new Set(names)].map((name) => ({ name, ok: oldOk[name] ?? true }))
     };
 
+    const dup = data.serial && items.find((i) => i.id !== editingId && (i.serial || "").toLowerCase() === data.serial.toLowerCase());
+    if (isAdmin() && dup && !confirm(`Серийный номер уже указан у ${dup.inv}. Сохранить всё равно?`)) return;
     const batch = writeBatch(db);
     const ref = old ? doc(db, "items", old.id) : doc(itemsCol);
     const id = ref.id;
